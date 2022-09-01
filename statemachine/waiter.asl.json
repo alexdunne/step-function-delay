@@ -1,0 +1,79 @@
+{
+    "Comment": "A state machine that waits for a period of time before continuing",
+    "StartAt": "SetInitialStatus",
+    "States": {
+        "SetInitialStatus": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::dynamodb:putItem",
+            "Parameters": {
+                "TableName": "${WaiterTable}",
+                "Item": {
+                    "Id": {
+                        "S.$": "$.id"
+                    },
+                    "StoredAt":{
+                        "S.$": "$$.State.EnteredTime"
+                    },
+                    "ProcessStatus": {
+                        "S": "WAITING"
+                    },
+                    "LastUpdated": {
+                        "S.$": "$$.State.EnteredTime"
+                    }
+                }
+            },
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "States.TaskFailed"
+                    ],
+                    "IntervalSeconds": 20,
+                    "MaxAttempts": 5,
+                    "BackoffRate": 10
+                }
+            ],
+            "Next": "WaitTimeout",
+            "ResultPath": null,
+            "OutputPath": "$"
+        },
+        "WaitTimeout": {
+            "Type": "Wait",
+            "Seconds": 30,
+            "Next": "SetFinalStatus",
+            "OutputPath": "$"
+        },
+        "SetFinalStatus": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::dynamodb:updateItem",
+            "Parameters": {
+                "TableName": "${WaiterTable}",
+                "Key": {
+                    "Id": {
+                        "S.$": "$.id"
+                    }
+                },
+                "UpdateExpression": "SET ProcessStatus = :newStatus, LastUpdated = :newTimestamp",
+                "ExpressionAttributeValues": {
+                    ":newStatus": {
+                        "S": "RELEASED"
+                    },
+                    ":newTimestamp": {
+                        "S.$": "$$.State.EnteredTime"
+                    }
+                }
+            },
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "States.TaskFailed"
+                    ],
+                    "IntervalSeconds": 20,
+                    "MaxAttempts": 5,
+                    "BackoffRate": 10
+                }
+            ],
+            "ResultPath": null,
+            "End": true
+        }
+    }
+}
